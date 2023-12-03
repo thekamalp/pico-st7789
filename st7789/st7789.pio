@@ -1,0 +1,52 @@
+.program st7789_16b
+.side_set 2   ; top bit is read strobe, bottom is write strobe
+
+.wrap_target
+	out pins, 16   side 2  ; read 16 bits to pins, toggle write strobe low
+	out x, 16      side 3  ; read 16 bits and throw away, toggle write strobe high
+.wrap
+
+% c-sdk {
+// Helper function to initialize PIO
+void st7789_16b_program_init(st7789_cfg_t* cfg, uint offset, float div)
+{
+	// Sets up state machine and wrap target. This function is automatically
+    // generated in st7789.pio.h.
+    pio_sm_config c = st7789_16b_program_get_default_config(offset);
+
+	// Allow PIO to control GPIO as outputs
+	pio_gpio_init(cfg->intf.pi.pio, cfg->intf.pi.pin_wr_rd_base);
+	pio_gpio_init(cfg->intf.pi.pio, cfg->intf.pi.pin_wr_rd_base + 1);
+
+	// Set pin directions to output
+	pio_sm_set_consecutive_pindirs(cfg->intf.pi.pio, cfg->intf.pi.sm, cfg->intf.pi.pin_wr_rd_base, 2, true);
+
+	// side connections to read/write strobe
+	sm_config_set_sideset_pins(&c, cfg->intf.pi.pin_wr_rd_base);
+
+	// PIO to control data pins
+	uint i;
+	for(i=0; i<16; i++) {
+		pio_gpio_init(cfg->intf.pi.pio, cfg->intf.pi.pin_data_base + i);
+	}
+
+	// set pins to output
+	pio_sm_set_consecutive_pindirs(cfg->intf.pi.pio, cfg->intf.pi.sm, cfg->intf.pi.pin_data_base, 16, true);
+
+	// connect pins to OUT pin
+	sm_config_set_out_pins(&c, cfg->intf.pi.pin_data_base, 16);
+
+    // setup autopull
+    sm_config_set_out_shift(&c, true, true, 32);
+
+    // setup autopush
+    sm_config_set_in_shift(&c, true, true, 32);
+    
+    // Set the clock divider for the state machine
+    sm_config_set_clkdiv(&c, div);
+
+    // Load configuration and jump to start of the program
+    pio_sm_init(cfg->intf.pi.pio, cfg->intf.pi.sm, offset, &c);
+}
+
+%}
